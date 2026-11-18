@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A study of epipolar geometry, image rectification, factorization, and triangulation. SYDE 671 Assignment 4, Questions 1–4.">
+  <meta name="theme-color" content="#171717">
+  <title>The Geometry Between Views | Reconstruct the World</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="assets/q1-data.js" defer></script>
+  <script src="script.js" defer></script>
+  <script src="assets/q4-point-cloud.js" defer></script>
+  <script src="assets/shouban-point-cloud.js" defer></script>
+  <script src="assets/shouban-mesh.js" defer></script>
+  <script src="figurine-mesh.js" defer></script>
+  <script src="point-cloud.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead">
+    <div class="shell masthead-inner">
+      <a class="wordmark" href="#top">RECONSTRUCT<span>THE WORLD</span></a>
+      <div class="course">UNIVERSITY OF WATERLOO<span>SYDE 671 · Computational vision</span></div>
+    </div>
+  </header>
+
+  <nav class="project-nav" aria-label="Project sections">
+    <div class="shell nav-inner">
+      <a class="assignment" href="#top">ASSIGNMENT 04 <span>/ QUESTIONS 01–04</span></a>
+      <div class="nav-links">
+        <a href="#experiment">Fundamental Matrix</a>
+        <a href="#rectification">Rectification</a>
+        <a href="#factorization">Factorization</a>
+        <a href="#triangulation">Triangulation</a>
+      </div>
+      <a class="log-link" href="assets/p1-results.txt" download>RUN OUTPUT <span aria-hidden="true">↓</span></a>
+    </div>
+  </nav>
+
+  <main id="main">
+    <section class="shell hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow hero-kicker">A STEREO GEOMETRY STUDY</p>
+        <h1 id="page-title">The geometry<br>between <em>views.</em></h1>
+        <p class="hero-summary">One scene, two photographs. Use their shared points to estimate the fundamental matrix and see where each point should appear in the other view.</p>
+        <div class="hero-actions">
+          <a class="primary-link" href="#experiment">Explore the matches <span aria-hidden="true">↓</span></a>
+          <div class="byline"><strong>Ke Yang</strong><span>Assignment 4 · Questions 1–4</span></div>
+        </div>
+      </div>
+
+      <figure class="hero-figure">
+        <div class="plate-heading"><strong>STEREO PAIR</strong><span>SET 01 · 37 MATCHES</span></div>
+        <div class="hero-pair">
+          <div class="hero-image">
+            <img src="assets/set1-view-1.jpg" width="512" height="512" alt="A model house photographed from the first camera position">
+            <svg id="hero-overlay-1" class="overlay" viewBox="0 0 512 512" aria-hidden="true"></svg>
+            <span class="frame-label">VIEW 01</span>
+          </div>
+          <div class="hero-image">
+            <img src="assets/set1-view-2.jpg" width="512" height="512" alt="The same model house photographed from the second camera position">
+            <svg id="hero-overlay-2" class="overlay" viewBox="0 0 512 512" aria-hidden="true"></svg>
+            <span class="frame-label">VIEW 02</span>
+          </div>
+        </div>
+        <figcaption><span aria-hidden="true" class="caption-mark"></span> A corresponding point and its predicted epipolar line in each view.</figcaption>
+      </figure>
+    </section>
+
+    <section class="experiment-band" id="experiment" aria-labelledby="experiment-title">
+      <div class="shell study">
+        <div class="section-heading">
+          <span class="number" aria-hidden="true">01</span>
+          <div><p class="eyebrow">POINT CORRESPONDENCES</p><h2 id="experiment-title">A point in one view. A line in the other.</h2></div>
+        </div>
+        <p class="intro">Switch between the two estimates to see how closely the predicted line passes through the marked point. Select a point in either image or use the slider to explore the other matches.</p>
+
+        <div class="controls" aria-label="Experiment settings">
+          <fieldset>
+            <legend>IMAGE PAIR</legend>
+            <div class="segments">
+              <button type="button" data-dataset="set1" aria-pressed="true">Set 01</button>
+              <button type="button" data-dataset="set2" aria-pressed="false">Set 02</button>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>ESTIMATOR</legend>
+            <div class="segments">
+              <button type="button" data-method="lls" aria-pressed="false">Linear</button>
+              <button type="button" data-method="normalized" aria-pressed="true">Normalized</button>
+            </div>
+          </fieldset>
+          <button type="button" id="all-lines" class="overlay-button" aria-pressed="false"><span aria-hidden="true">≋</span> Show all lines</button>
+        </div>
+
+        <div class="view-pair">
+          <figure class="view">
+            <div class="view-heading"><h3>Image 01</h3><span>ℓ₁ = Fᵀ x₂</span></div>
+            <div class="image-stage" id="stage-1">
+              <img id="view-1" src="assets/set1-view-1.jpg" width="512" height="512" alt="First view of the model house, with matched points and a predicted epipolar line">
+              <svg id="overlay-1" class="overlay" viewBox="0 0 512 512" aria-hidden="true"></svg>
+            </div>
+            <figcaption><span>Distance for this match</span><strong id="point-distance-1">0.32 px</strong></figcaption>
+          </figure>
+          <figure class="view">
+            <div class="view-heading"><h3>Image 02</h3><span>ℓ₂ = F x₁</span></div>
+            <div class="image-stage" id="stage-2">
+              <img id="view-2" src="assets/set1-view-2.jpg" width="512" height="512" alt="Second view of the model house, with matched points and a predicted epipolar line">
+              <svg id="overlay-2" class="overlay" viewBox="0 0 512 512" aria-hidden="true"></svg>
+            </div>
+            <figcaption><span>Distance for this match</span><strong id="point-distance-2">0.28 px</strong></figcaption>
+          </figure>
+        </div>
+
+        <div class="scrubber">
+          <div class="match-readout"><label for="match-slider">CORRESPONDENCE</label><output id="match-output" for="match-slider" aria-live="polite">03 / 37</output></div>
+          <div class="range-controls">
+            <button id="previous-match" aria-label="Previous match" type="button">←</button>
+            <input id="match-slider" type="range" min="1" max="37" value="3" aria-valuetext="Match 3 of 37">
+            <button id="next-match" aria-label="Next match" type="button">→</button>
+          </div>
+          <p class="legend"><span><i class="dot"></i>Observed point</span><span><i class="line"></i>Predicted line</span></p>
+        </div>
+        <noscript><p class="intro">Enable JavaScript to change the selected match and estimator. The written method and results are below.</p></noscript>
+      </div>
+    </section>
+
+    <section class="shell study" id="method" aria-labelledby="method-title">
+      <div class="section-heading">
+        <span class="number" aria-hidden="true">02</span>
+        <div><p class="eyebrow">IMPLEMENTATION IN P1.PY</p><h2 id="method-title">Implementation descriptions</h2></div>
+      </div>
+      <div class="method-list">
+        <article class="method-row">
+          <div><h3>Linear eight-point</h3><code>lls_eight_point_alg</code></div>
+          <div>
+            <section class="description-slot" id="description-1b" aria-labelledby="description-1b-title">
+              <h4 id="description-1b-title">1(b) · Description of the linear eight-point implementation</h4>
+              <div class="description-body">
+                <p>To estimate <em>F</em>, suppose the same point is represented by <span class="math">x₁ = (x, y, 1)</span> in image 1 and <span class="math">x₂ = (u, v, 1)</span> in image 2. We want <span class="math">Fx₁</span> to give a line in image 2 on which <span class="math">x₂</span> lies, so that <span class="math">x₂ᵀ F x₁ = 0</span>. The corresponding row of the design matrix is <span class="math">[ux, uy, u, vx, vy, v, x, y, 1]</span>.</p>
+                <p>In Set 1, we use 37 such point pairs, and in Set 2, we use 46. We stack at least eight rows and use the last right singular vector to fit the nine coefficients of <em>F</em> up to scale. A second SVD sets the smallest singular value of <em>F</em> to zero, enforcing rank two. Geometrically, the lines in each image share an epipole.</p>
+              </div>
+            </section>
+            <section class="matrix-panel method-matrices" id="matrices-1b" aria-labelledby="matrices-1b-title">
+              <h4 id="matrices-1b-title">1(b) · Resulting fundamental matrices</h4>
+              <figure>
+                <figcaption>Set 01</figcaption>
+                <pre>[  0.000001552181  -0.000008181615  -0.001504401110 ]
+[ -0.000005869971  -0.000000302892  -0.011360760521 ]
+[ -0.003523120361   0.014145388091   0.999828067920 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Set 02</figcaption>
+                <pre>[ -0.000005630872   0.000027497658  -0.006426504111 ]
+[ -0.000027762283  -0.000006747485   0.015218203331 ]
+[  0.010762359534  -0.012251923963  -0.999730547050 ]</pre>
+              </figure>
+            </section>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>Point-to-line distance</h3><code>compute_distance_to_epipolar_lines</code></div>
+          <div>
+            <section class="description-slot" id="description-1f" aria-labelledby="description-1f-title">
+              <h4 id="description-1f-title">1(f) · Description of the point-to-epipolar-line distance calculation</h4>
+              <div class="description-body">
+                <p>First, we use the points in image 2 to calculate the corresponding epipolar lines in image 1.</p>
+                <pre class="equation"><code>lines = points2 @ F</code></pre>
+                <p>We substitute each point in image 1 into the equation of its corresponding line and take the absolute value. We divide by the length of the line’s normal vector to obtain the perpendicular distance.</p>
+                <p class="equation">d = |ax + by + c| / √(a² + b²)</p>
+                <p>We then average these distances across all matched points. To calculate the mean distance for image 2, we swap the two sets of points and use <span class="math">Fᵀ</span> in place of <span class="math">F</span>.</p>
+              </div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="results-band" id="results" aria-labelledby="results-title">
+      <div class="shell study">
+        <div class="section-heading">
+          <span class="number" aria-hidden="true">03</span>
+          <div><p class="eyebrow">MEASURED ON THE ASSIGNMENT DATA</p><h2 id="results-title">About one pixel after normalization.</h2></div>
+        </div>
+        <p class="intro">The normalized estimates bring the mean distance below one pixel in both views of both data sets. All four estimated matrices have rank two.</p>
+        <div class="results-grid">
+          <div>
+            <table>
+              <caption>Mean point-to-epipolar-line distance <span>PIXELS</span></caption>
+              <thead><tr><th scope="col">Pair</th><th scope="col">Method</th><th scope="col">Image 01</th><th scope="col">Image 02</th></tr></thead>
+              <tbody>
+                <tr id="set1-lls"><th scope="row">Set 01</th><td>Linear</td><td>28.0257</td><td>25.1629</td></tr>
+                <tr id="set1-normalized" class="current"><th scope="row">Set 01</th><td>Normalized</td><td>0.8906</td><td>0.8287</td></tr>
+                <tr id="set2-lls"><th scope="row">Set 02</th><td>Linear</td><td>9.7014</td><td>14.5682</td></tr>
+                <tr id="set2-normalized"><th scope="row">Set 02</th><td>Normalized</td><td>0.8895</td><td>0.8917</td></tr>
+              </tbody>
+            </table>
+            <p class="results-note">The highlighted row follows the experiment selection.</p>
+          </div>
+          <div class="matrix-panel">
+            <section id="matrices-1d" aria-labelledby="matrices-1d-title">
+              <h3 id="matrices-1d-title">1(d) · Fundamental matrices from the normalized eight-point algorithm</h3>
+              <figure>
+                <figcaption>Set 01</figcaption>
+                <pre>[  0.000004455056  -0.000036393557   0.000603119338 ]
+[ -0.000033505584  -0.000002322180  -0.043914877255 ]
+[ -0.005847625458   0.060308586443   0.997195967204 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Set 02</figcaption>
+                <pre>[ -0.000013335122   0.000222048310  -0.013780216816 ]
+[  0.000320320025   0.000028373133   0.619621779696 ]
+[  0.020867222590  -0.752241692662  -0.222656232114 ]</pre>
+              </figure>
+            </section>
+            <section class="normalization-description" aria-labelledby="normalization-description-title">
+              <h4 id="normalization-description-title">1(c) · Normalized eight-point implementation</h4>
+              <p>Compared with 1(a), the normalized eight-point algorithm first computes the centroid of the matched points in each image and chooses a scale factor so that their average distance from the centroid after scaling is √2. We apply the translation and scaling to both sets of points using <code>points @ transform.T</code>, then use the eight-point algorithm from 1(a) to estimate <code>F_normalized</code>. Finally, we transform the matrix back to the original pixel coordinates and scale it to unit norm.</p>
+              <pre><code>F = transform2.T @ F_normalized @ transform1
+return F / np.linalg.norm(F)</code></pre>
+            </section>
+            <a href="assets/p1-results.txt" download>Download the full run output <span aria-hidden="true">↓</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="shell study" id="rectification" aria-labelledby="rectification-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">QUESTION 2 · MATCHING HOMOGRAPHIES</p><h2 id="rectification-title">Image rectification</h2></div>
+      </div>
+
+      <figure class="view rectification-figure">
+        <div class="view-heading"><h3>2(d) · Rectified image pair</h3><span>SET 01</span></div>
+        <img src="assets/q2-rectified-pair.png" width="1760" height="800" alt="Two rectified views of the model house with horizontal guides through corresponding features" loading="lazy">
+        <figcaption>
+          <p>Rectification aligns corresponding epipolar lines with the same horizontal row in both images. For a point at (x₁, y) in the first image, its match is approximately at (x₂, y) in the second image. We can find the corresponding point by searching horizontally for x₂ along that row. For a single match in an n × n image, this reduces the search from O(n²) candidate positions in the full image to O(n) candidate positions along the row.</p>
+          <p>For the 37 matches in Set 01, the mean absolute vertical difference fell from <strong>33.52 px</strong> to <strong>0.86 px</strong>.</p>
+        </figcaption>
+      </figure>
+
+      <p class="intro">Set 01 is the dataset used by the assignment starter. The numerical results for Set 02 are included for comparison.</p>
+      <div class="method-list">
+        <article class="method-row">
+          <div><h3>2(a) · Epipoles</h3><code>compute_epipole</code></div>
+          <div>
+            <p>Use SVD to find the null vector of <span class="math">Fᵀ</span> for the epipole in image 2 and of <span class="math">F</span> for the epipole in image 1.</p>
+            <p class="equation">e₂ᵀ F x₁ = 0 ⟹ Fᵀ e₂ = 0</p>
+            <div class="rectification-values" id="rectification-epipoles">
+              <section aria-labelledby="rectification-e1-set1">
+                <h4 id="rectification-e1-set1">Set 01</h4>
+                <figure>
+                  <figcaption>e₁ · Image 01</figcaption>
+                  <pre>[ -1300.78593467  -142.66135921  1.00000000 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>e₂ · Image 02</figcaption>
+                  <pre>[ 1654.22408929  45.42630264  1.00000000 ]</pre>
+                </figure>
+              </section>
+              <section aria-labelledby="rectification-e1-set2">
+                <h4 id="rectification-e1-set2">Set 02</h4>
+                <figure>
+                  <figcaption>e₁ · Image 01</figcaption>
+                  <pre>[ -1929.61596839  -53.82363481  1.00000000 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>e₂ · Image 02</figcaption>
+                  <pre>[ 3378.09319249  75.48719942  1.00000000 ]</pre>
+                </figure>
+              </section>
+            </div>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>2(b) · Horizontal epipolar lines</h3><code>compute_H</code></div>
+          <div>
+            <p>Translate the image center to the origin, rotate the epipole onto the horizontal axis, send it to infinity, and translate back. We compute <span class="math">H₂ = T⁻¹GRT</span> according to the method given in the assignment.</p>
+            <div class="rectification-values" id="rectification-h2">
+              <section aria-labelledby="rectification-H2-set1">
+                <h4 id="rectification-H2-set1">Set 01</h4>
+                <figure>
+                  <figcaption>H₂ · Image 02</figcaption>
+                  <pre>[  0.80982012  -0.12195958  79.90770154 ]
+[ -0.03010743   1.01581093   3.65990577 ]
+[ -0.00069933   0.00010532   1.15206701 ]</pre>
+                </figure>
+              </section>
+              <section aria-labelledby="rectification-H2-set2">
+                <h4 id="rectification-H2-set2">Set 02</h4>
+                <figure>
+                  <figcaption>H₂ · Image 02</figcaption>
+                  <pre>[  0.91660965  -0.05299642  34.91501489 ]
+[ -0.02400160   1.00305778   5.36161772 ]
+[ -0.00031923   0.00001846   1.07699802 ]</pre>
+                </figure>
+              </section>
+            </div>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>2(c) · Matching homographies</h3><code>compute_matching_homographies</code></div>
+          <div>
+            <p>Build a compatible transform for image 1 from <span class="math">H₂</span> and <span class="math">F</span>. Fit its horizontal coordinates to the transformed matches using least squares to obtain <span class="math">H₁</span>. <a href="#rectification-h2">See H₂ in 2(b).</a></p>
+            <div class="rectification-values" id="rectification-h1">
+              <section aria-labelledby="rectification-M-set1">
+                <h4 id="rectification-M-set1">Set 01</h4>
+                <figure>
+                  <figcaption>M · Initial mapping</figcaption>
+                  <pre>[ 1653.95848680  1656.96368772   1699.56692997 ]
+[   55.09958999   -54.33765024  -1604.15868494 ]
+[    0.94437188     0.99781182    -71.67244532 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>H₂M · Initial homography for image 01</figcaption>
+                  <pre>[ 1408.15151758  1428.20237169  -4155.19436822 ]
+[    9.63063391  -101.43180414  -1943.00591198 ]
+[   -0.06288279    -0.01494395    -83.92897048 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>Hₐ · Affine correction (first row gives a)</figcaption>
+                  <pre>[ -0.05377617  -0.48119563  23.82470221 ]
+[  0.00000000   1.00000000   0.00000000 ]
+[  0.00000000   0.00000000   1.00000000 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>H₁ = HₐH₂M · Final homography for image 01</figcaption>
+                  <pre>[ -81.85737912   -28.35074908   -841.16633485 ]
+[   9.63063391  -101.43180414  -1943.00591198 ]
+[  -0.06288279    -0.01494395    -83.92897048 ]</pre>
+                </figure>
+              </section>
+              <section aria-labelledby="rectification-M-set2">
+                <h4 id="rectification-M-set2">Set 02</h4>
+                <figure>
+                  <figcaption>M · Initial mapping</figcaption>
+                  <pre>[ 3379.66808036  3321.30854545  3360.66587531 ]
+[    4.99576351  2616.62996256   827.62692117 ]
+[    2.08307753     1.07908528  2095.18034588 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>H₂M · Initial homography for image 01</figcaption>
+                  <pre>[ 3170.30229142  2943.34770140  76189.81047327 ]
+[  -64.93773542  2550.69996721  11983.05233046 ]
+[    1.16466852     0.15020460   2255.44753935 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>Hₐ · Affine correction (first row gives a)</figcaption>
+                  <pre>[ 0.68311732  -0.62317828  -29.61282677 ]
+[ 0.00000000   1.00000000    0.00000000 ]
+[ 0.00000000   0.00000000    1.00000000 ]</pre>
+                </figure>
+                <figure>
+                  <figcaption>H₁ = HₐH₂M · Final homography for image 01</figcaption>
+                  <pre>[ 2171.66707105   416.66299834  -22211.17590748 ]
+[  -64.93773542  2550.69996721   11983.05233046 ]
+[    1.16466852     0.15020460    2255.44753935 ]</pre>
+                </figure>
+              </section>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="shell study" id="factorization" aria-labelledby="factorization-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">QUESTION 3 · STRUCTURE FROM MOTION</p><h2 id="factorization-title">The factorization method</h2></div>
+      </div>
+
+      <div class="method-list">
+        <article class="method-row">
+          <div><h3>3(a)–(b) · Implementation</h3><code>factorization_method</code></div>
+          <div>
+            <p>First, we put each pair of matched points in the same column. For example, if the first point is (100, 200) in image 1 and (150, 250) in image 2, the first column is <span class="math">[100, 200, 150, 250]ᵀ</span>. Set 01 contains 37 matching pairs, so the matrix has dimensions 4 × 37.</p>
+            <p>Next, we subtract the mean of each row from every entry in that row to form the centered measurement matrix <span class="math">W</span>. This removes the translation term in each image’s affine projection.</p>
+            <p class="equation">p = AX + t &nbsp; ⇒ &nbsp; p − p̄ = A(X − X̄)</p>
+            <p>We then apply SVD to <span class="math">W</span> and keep the three largest singular values to recover 3D coordinates.</p>
+            <p class="equation">W ≈ U<sub>3</sub>Σ<sub>3</sub>V<sub>3</sub>ᵀ</p>
+            <p>We split <span class="math">Σ<sub>3</sub></span> into two square-root factors to obtain the camera motion matrix <span class="math">M</span> and the 3D structure matrix <span class="math">S</span>, whose product approximates <span class="math">W</span>.</p>
+            <p class="equation">M = U<sub>3</sub>√Σ<sub>3</sub> &nbsp; (4 × 3)<br>S = √Σ<sub>3</sub>V<sub>3</sub>ᵀ &nbsp; (3 × N)</p>
+          </div>
+        </article>
+      </div>
+
+      <figure class="view factorization-figure">
+        <div class="view-heading"><h3>3(c) · Full reconstruction</h3><span>SET 01 · 37 POINTS</span></div>
+        <img src="assets/q3-full.png" width="1440" height="1280" alt="Similarity-aligned full reconstruction and ground truth, shown side by side from an oblique view and a view along the reference plane" loading="lazy">
+        <figcaption>
+          <p>The reconstructed shape is similar to the ground-truth shape. In the side view, some points still differ in their Y and Z coordinates.</p>
+          <p>The image measurements constrain the product <span class="math">MS</span>. For any invertible matrix <span class="math">A</span>, <span class="math">MS = (MA)(A⁻¹S)</span>. This means a rotation, nonuniform scaling, or shear of the reconstructed points can be compensated for by a corresponding change in the camera motion matrix, leaving the predicted 2D coordinates unchanged. I used the ground truth only to align the points for visual comparison and to measure the error. The alignment uses a translation, a uniform scale, and an orthogonal transformation.</p>
+          <p>The relative 3D RMS point error after alignment is <strong>14.55%</strong> of the ground truth’s RMS radius.</p>
+        </figcaption>
+      </figure>
+
+      <figure class="view factorization-figure">
+        <div class="view-heading"><h3>3(e) · Subset reconstruction</h3><span>SET 01 SUBSET · 18 POINTS</span></div>
+        <img src="assets/q3-subset.png" width="1440" height="1280" alt="Similarity-aligned subset reconstruction and ground truth from two viewpoints, showing out-of-plane offsets more clearly in the view along the reference plane" loading="lazy">
+        <figcaption>
+          <p>In 3(d), the first three singular values are relatively large because the points are spread across all three spatial dimensions. The 18 points in this subset are nearly coplanar, so they provide little information about the direction perpendicular to the plane. As a result, the third singular value is small.</p>
+          <p>The reconstruction uses the three largest singular values, so the weak third component leaves the structure less constrained in that direction. The reconstructed shape therefore matches the ground truth less closely.</p>
+          <p>The relative 3D RMS point error rises to <strong>19.81%</strong>.</p>
+        </figcaption>
+      </figure>
+
+      <div class="factorization-spectrum">
+        <table>
+          <caption>3(d) and 3(f) · Singular values of W before truncation</caption>
+          <thead><tr><th scope="col">Singular value</th><th scope="col">Full set (37 points)</th><th scope="col">Subset (18 points)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">σ₁</th><td>959.585222</td><td>264.543965</td></tr>
+            <tr><th scope="row">σ₂</th><td>540.476132</td><td>210.060720</td></tr>
+            <tr><th scope="row">σ₃</th><td>184.431748</td><td>7.219218</td></tr>
+            <tr><th scope="row">σ₄</th><td>27.915196</td><td>5.128577</td></tr>
+          </tbody>
+        </table>
+        <p class="results-note"><strong>3(d)</strong> Since the scene is three-dimensional, the centered measurement matrix has at most three nonzero singular values under the ideal affine model. In our results, all four singular values are nonzero. Errors in the measured image coordinates and perspective effects can cause the data to deviate from the affine model, giving rise to a nonzero fourth singular value.</p>
+        <p class="results-note"><strong>3(f)</strong> All four values decrease when the subset covers fewer points and a smaller region. The third value drops especially sharply, and the ratio σ₃/σ₄ falls from 6.61 to 1.41. The weak third direction is therefore harder to distinguish from errors in the measurements and model.</p>
+      </div>
+    </section>
+    <section class="shell study" id="triangulation" aria-labelledby="triangulation-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">QUESTION 4 · STRUCTURE FROM MOTION</p><h2 id="triangulation-title">Triangulation in structure from motion</h2></div>
+      </div>
+
+      <figure class="view triangulation-figure" id="statue-comparison">
+        <div class="view-heading"><h3>4(f) · Starter pipeline reconstruction</h3><span>66,385 POINTS</span></div>
+        <img src="assets/q4-statue-original.png" width="1440" height="1280" alt="Original grayscale point cloud of the statue, with gaps along the face and outline" loading="lazy">
+        <p class="comparison-note">The previous version had many gaps and an unclear outline. I added more 3D points and colored each point using the original photos to improve the appearance.</p>
+        <div class="view-heading"><h3>Optional refinement with OpenCV</h3><span>77,619 POINTS</span></div>
+        <img src="assets/q4-statue.png" width="1440" height="1280" alt="Refined point cloud of the statue, with colors sampled from the original photos" loading="lazy">
+        <figcaption>
+          <p>The pipeline estimates camera poses from five photos and triangulates 66,385 starter matches. The refined cloud adds stereo points from all four adjacent image pairs that pass geometric and color checks, then samples nearby points to reduce crowding.</p>
+          <p>Reconstructing a larger scene would require views of several sides. For a house, for example, the front view and back view share almost no visible features, so intermediate views around corners are especially important. Other things, like blank walls that provide less information and the difficulty of matching repeated windows, make reconstructing a house harder than reconstructing the statue.</p>
+        </figcaption>
+      </figure>
+
+      <div class="method-list">
+        <article class="method-row">
+          <div><h3>4(a) · Candidate camera poses</h3><code>estimate_initial_RT</code></div>
+          <div>
+            <p>Use the SVD of the essential matrix to obtain two rotations and one translation direction. Enforce determinant +1 for each rotation and pair each with both signs of the translation direction to form four candidate poses.</p>
+            <p class="equation">(R₁, +t), &nbsp; (R₁, −t), &nbsp; (R₂, +t), &nbsp; (R₂, −t)</p>
+            <section class="matrix-panel method-matrices" id="q4-candidate-poses" aria-labelledby="q4-candidate-poses-title">
+              <h4 id="q4-candidate-poses-title">Calculated [R | t] matrices for views B21 and B22</h4>
+              <figure>
+                <figcaption>Candidate 01 · (R₁, +t)</figcaption>
+                <pre>[  0.98305251  -0.11787055  -0.14040758  |   0.99941228 ]
+[ -0.11925737  -0.99286228  -0.00147453  |  -0.00886961 ]
+[ -0.13923158   0.01819418  -0.99009269  |   0.03311219 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Candidate 02 · (R₁, −t)</figcaption>
+                <pre>[  0.98305251  -0.11787055  -0.14040758  |  -0.99941228 ]
+[ -0.11925737  -0.99286228  -0.00147453  |   0.00886961 ]
+[ -0.13923158   0.01819418  -0.99009269  |  -0.03311219 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Candidate 03 · (R₂, +t)</figcaption>
+                <pre>[  0.97364135  -0.09878708  -0.20558119  |   0.99941228 ]
+[  0.10189204   0.99478508   0.00454512  |  -0.00886961 ]
+[  0.20406010  -0.02537241   0.97862951  |   0.03311219 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Candidate 04 · (R₂, −t)</figcaption>
+                <pre>[  0.97364135  -0.09878708  -0.20558119  |  -0.99941228 ]
+[  0.10189204   0.99478508   0.00454512  |   0.00886961 ]
+[  0.20406010  -0.02537241   0.97862951  |  -0.03311219 ]</pre>
+              </figure>
+            </section>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>4(b) · Linear triangulation</h3><code>linear_estimate_3d_point</code></div>
+          <div>
+            <p>Let <span class="math">P<sub>i</sub></span> be the camera matrix for image <em>i</em>, <span class="math">X<sub>h</sub> = [X, Y, Z, w]ᵀ</span> the homogeneous 3D point, and <span class="math">(u<sub>i</sub>, v<sub>i</sub>)</span> the observed pixel. The perspective projection satisfies the following equations.</p>
+            <div class="equation">
+              <math display="block">
+                <msub><mi>u</mi><mi>i</mi></msub><mo>=</mo>
+                <mfrac>
+                  <mrow><msub><mi>P</mi><mrow><mi>i</mi><mo>,</mo><mn>1</mn></mrow></msub><msub><mi>X</mi><mi>h</mi></msub></mrow>
+                  <mrow><msub><mi>P</mi><mrow><mi>i</mi><mo>,</mo><mn>3</mn></mrow></msub><msub><mi>X</mi><mi>h</mi></msub></mrow>
+                </mfrac>
+                <mspace width="1.5em"/>
+                <msub><mi>v</mi><mi>i</mi></msub><mo>=</mo>
+                <mfrac>
+                  <mrow><msub><mi>P</mi><mrow><mi>i</mi><mo>,</mo><mn>2</mn></mrow></msub><msub><mi>X</mi><mi>h</mi></msub></mrow>
+                  <mrow><msub><mi>P</mi><mrow><mi>i</mi><mo>,</mo><mn>3</mn></mrow></msub><msub><mi>X</mi><mi>h</mi></msub></mrow>
+                </mfrac>
+              </math>
+            </div>
+            <p>Each image contributes two linear equations from its camera matrix and measured pixel coordinates. Stack the equations, use the last right singular vector as the homogeneous point, and divide by its fourth coordinate to get the 3D position.</p>
+            <section class="matrix-panel method-matrices" id="q4-linear-points" aria-labelledby="q4-linear-points-title">
+              <h4 id="q4-linear-points-title">Triangulated 3D points for views B21 and B22</h4>
+              <figure>
+                <figcaption>Match 01 · Starter check</figcaption>
+                <pre>Estimated (X, Y, Z)  (0.67671686, -1.10241883, 4.66034000)
+Expected (X, Y, Z)   (0.6774, -1.1029, 4.6621)</pre>
+              </figure>
+              <figure>
+                <figcaption>Additional estimated points</figcaption>
+                <pre>Match 02  (0.56524477, -1.29826699, 4.41933467)
+Match 03  (0.23184643, -1.28631954, 4.31571424)</pre>
+              </figure>
+            </section>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>4(c) · Reprojection error and Jacobian</h3><code>reprojection_error</code> · <code>jacobian</code></div>
+          <div>
+            <p>We project the 3D point into each image. If the homogeneous projection is <span class="math">[a, b, c]</span>, the predicted pixel is <span class="math">(a/c, b/c)</span>. We subtract the measured pixel coordinates from the predicted coordinates. For two images, this gives four error values.</p>
+            <p class="equation">e = [Δu₁, Δv₁, Δu₂, Δv₂]ᵀ</p>
+            <p>Next, we calculate how the error changes when the 3D point moves in each of the three spatial dimensions. We differentiate the projected x and y coordinates with respect to X, Y, and Z using the quotient rule. For <span class="math">K</span> views, the Jacobian has <span class="math">2K</span> rows and three columns. The vector <span class="math">e</span> gives the current deviation, and <span class="math">J</span> describes how moving the 3D point changes that deviation.</p>
+            <section class="matrix-panel method-matrices" id="q4-reprojection-examples" aria-labelledby="q4-reprojection-examples-title">
+              <h4 id="q4-reprojection-examples-title">Reprojection errors and Jacobians for views B21 and B22</h4>
+              <p>The residuals are in pixels. Each row of <span class="math">J</span> corresponds to the same entry in <span class="math">e</span>.</p>
+              <figure>
+                <figcaption>Match 01 · Starter reference point</figcaption>
+                <pre>X = (0.6774, -1.1029, 4.6621)
+e = [-0.00954584, -0.51714071, 0.00593078, 0.50163170]
+J = [  154.33943931     0.00000000   -22.42541691 ]
+    [    0.00000000   154.33943931    36.51165089 ]
+    [  141.87950588   -14.27738422   -56.20341644 ]
+    [   21.97927660   149.50628901    32.23425643 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Match 02 · Linear estimate from 4(b)</figcaption>
+                <pre>X = (0.56524477, -1.29826699, 4.41933467)
+e = [-0.06502508, -0.40824760, 0.00005045, 0.40516943]
+J = [  162.81769839     0.00000000   -20.82482087 ]
+    [    0.00000000   162.81769839    47.83091990 ]
+    [  149.89904102   -15.08379887   -59.50968149 ]
+    [   25.11595878   157.74792839    43.12617894 ]</pre>
+              </figure>
+              <figure>
+                <figcaption>Match 03 · Linear estimate from 4(b)</figcaption>
+                <pre>X = (0.23184643, -1.28631954, 4.31571424)
+e = [-0.04203345, -0.25930786, -0.00012359, 0.26127346]
+J = [  166.72695658     0.00000000    -8.95681386 ]
+    [    0.00000000   166.72695658    49.69377724 ]
+    [  157.91841444   -15.94201295   -51.52349197 ]
+    [   26.63506342   163.85637335    47.38398358 ]</pre>
+              </figure>
+            </section>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>4(d) · Nonlinear refinement</h3><code>nonlinear_estimate_3d_point</code></div>
+          <div>
+            <p>We initialize the 3D point with the linear estimate and apply ten Gauss–Newton updates to minimize the squared reprojection error. In each iteration, we recompute the residual <span class="math">e</span> and the Jacobian <span class="math">J</span> at the current point. If the point moves by <span class="math">Δ</span>, we approximate the new residual as follows.</p>
+            <p class="equation">e(X + Δ) ≈ e(X) + JΔ</p>
+            <p>We choose <span class="math">Δ</span> to minimize the squared norm of this linear approximation, then update the point to <span class="math">X + Δ</span>.</p>
+            <section class="matrix-panel method-matrices" id="q4-gauss-newton-example" aria-labelledby="q4-gauss-newton-example-title">
+              <h4 id="q4-gauss-newton-example-title">Gauss–Newton refinement on the starter test case</h4>
+              <figure>
+                <figcaption>3D point and reprojection error</figcaption>
+                <pre>Linear estimate
+  (-0.57902456, -5.05938068, 5.20396692)
+First update Δ
+  (-0.36255194, 0.44336328, -0.77863169)
+Refined estimate after 10 updates
+  (-0.92055794, -4.63993556, 4.47305116)
+Reprojection error norm
+  98.7354 px → 95.5948 px</pre>
+              </figure>
+            </section>
+          </div>
+        </article>
+        <article class="method-row">
+          <div><h3>4(e) · Pose selection</h3><code>estimate_RT_from_E</code></div>
+          <div>
+            <p>Triangulate the matches for each candidate. Count the points with positive depth in the first camera and in the transformed second camera, then select the pose with the largest count.</p>
+            <figure class="view point-cloud-view">
+              <div class="view-heading">
+                <h4>Interactive statue point cloud</h4>
+                <span>77,619 POINTS</span>
+              </div>
+              <canvas id="q4-point-cloud-canvas" width="800" height="640" tabindex="0" aria-label="Interactive 3D point cloud of the reconstructed statue" aria-describedby="q4-cloud-instructions">
+                The reconstructed point cloud is also shown in 4(f).
+              </canvas>
+              <figcaption>
+                <div>
+                  <p id="q4-cloud-instructions">Drag to rotate or focus the viewer and use the arrow keys.</p>
+                  <p id="q4-cloud-status" role="status"></p>
+                  <noscript>Enable JavaScript to rotate the point cloud.</noscript>
+                </div>
+                <div class="segments" role="group" aria-label="Point cloud view controls">
+                  <button type="button" id="q4-cloud-zoom-in">Zoom in</button>
+                  <button type="button" id="q4-cloud-zoom-out">Zoom out</button>
+                  <button type="button" id="q4-cloud-reset">Reset view</button>
+                </div>
+              </figcaption>
+            </figure>
+          </div>
+        </article>
+      </div>
+
+      <table class="triangulation-results">
+        <caption>Checks on the provided examples</caption>
+        <thead><tr><th scope="col">Part</th><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">4(a)</th><td>Candidate camera poses</td><td>4</td></tr>
+          <tr><th scope="row">4(b)</th><td>Linear 3D estimate vs. reference (L1 difference)</td><td>0.00292431</td></tr>
+          <tr><th scope="row">4(c)</th><td>Reprojection residual vs. reference (L1 difference)</td><td>8.3013 × 10⁻⁷ px</td></tr>
+          <tr><th scope="row">4(c)</th><td>Jacobian vs. reference (L1 difference)</td><td>1.8171 × 10⁻⁸</td></tr>
+          <tr><th scope="row">4(d)</th><td>Reprojection error norm before and after refinement</td><td>98.7354 → 95.5948 px</td></tr>
+          <tr><th scope="row">4(e)</th><td>Selected camera pose</td><td>Matches the reference to four decimals</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="shell reflection">If we consider time as the fourth dimension, could we construct a non-static model with a point cloud?</p>
+
+    <section class="shell study personal-project" id="shouban" aria-labelledby="shouban-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">PERSONAL PROJECT · OUTSIDE THE ASSIGNMENT</p><h2 id="shouban-title">Figurine reconstruction</h2></div>
+      </div>
+      <p class="intro">Camera poses were estimated from 13 photos. It seems that occlusion and color matching are also problems.</p>
+      <figure class="view point-cloud-view">
+        <div class="view-heading">
+          <h3>Interactive figurine reconstruction</h3>
+          <span id="shouban-cloud-point-count"></span>
+        </div>
+        <canvas id="shouban-point-cloud-canvas" width="800" height="640" tabindex="0" aria-label="Interactive 3D reconstruction of the figurine" aria-describedby="shouban-cloud-instructions">
+          The figurine viewer requires browser canvas support.
+        </canvas>
+        <figcaption>
+          <div>
+            <p id="shouban-cloud-instructions">Drag to rotate or focus the viewer and use the arrow keys.</p>
+            <p id="shouban-cloud-status" role="status"></p>
+            <noscript>Enable JavaScript to rotate the point cloud.</noscript>
+          </div>
+          <div class="segments" role="group" aria-label="Figurine point cloud controls">
+            <button type="button" id="shouban-cloud-zoom-in">Zoom in</button>
+            <button type="button" id="shouban-cloud-zoom-out">Zoom out</button>
+            <button type="button" id="shouban-cloud-reset">Reset view</button>
+          </div>
+        </figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <footer class="shell footer">
+    <div><strong>Ke Yang</strong><span>SYDE 671 · Assignment 4 · Questions 1–4</span></div>
+    <a href="#top">Back to top ↑</a>
+  </footer>
+</body>
+</html>
